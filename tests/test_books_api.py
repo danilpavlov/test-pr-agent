@@ -1,3 +1,4 @@
+import json
 import pytest
 from httpx import AsyncClient
 
@@ -158,4 +159,75 @@ async def test_delete_book(client: AsyncClient, db_session) -> None:
 
     # Проверяем, что книга удалена из базы данных
     result = await db_session.get(Book, book.id)
-    assert result is None 
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_import_books_json(client: AsyncClient, db_session) -> None:
+    """Тест импорта книг из JSON."""
+    # Подготовка тестовых данных
+    books_data = [
+        {
+            "title": "Импортированная книга 1",
+            "author": "Автор импорта 1",
+            "description": "Описание импортированной книги 1",
+            "publication_year": 2021
+        },
+        {
+            "title": "Импортированная книга 2",
+            "author": "Автор импорта 2",
+            "description": "Описание импортированной книги 2",
+            "publication_year": 2022
+        }
+    ]
+    
+    # Создание JSON-файла для тестирования
+    json_content = json.dumps(books_data).encode("utf-8")
+    
+    # Отправка запроса на импорт книг
+    response = await client.post(
+        "/api/books/import/json",
+        files={"file": ("books.json", json_content, "application/json")}
+    )
+    
+    # Проверка статус-кода ответа
+    assert response.status_code == 200
+    
+    # Проверка данных в ответе
+    assert response.json()["status"] is True
+    assert "Импортировано 2 из 2 книг" in response.json()["message"]
+    assert response.json()["successful_imports"] == 2
+    assert response.json()["failed_imports"] == 0
+    
+    # Проверка, что книги были добавлены в базу данных
+    # Получаем все книги
+    query = await client.get("/api/books")
+    books = query.json()["items"]
+    
+    # Проверяем, что импортированные книги есть в списке
+    imported_titles = [b["title"] for b in books]
+    assert "Импортированная книга 1" in imported_titles
+    assert "Импортированная книга 2" in imported_titles
+    
+    # Тестирование с некорректными данными
+    invalid_book_data = {
+        "title": "Некорректная книга",
+        # Отсутствует обязательное поле автора
+        "publication_year": 3000  # Некорректный год (слишком большой)
+    }
+    
+    json_content = json.dumps(invalid_book_data).encode("utf-8")
+    
+    response = await client.post(
+        "/api/books/import/json",
+        files={"file": ("invalid_book.json", json_content, "application/json")}
+    )
+    
+    # Проверка статус-кода ответа
+    assert response.status_code == 200
+    
+    # Проверка данных в ответе на ошибки валидации
+    assert response.json()["successful_imports"] == 0
+    assert response.json()["failed_imports"] == 1
+    assert "не импортировано из-за ошибок" in response.json()["message"]
+    assert len(response.json()["errors"]) == 1 
