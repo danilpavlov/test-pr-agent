@@ -158,4 +158,51 @@ async def test_delete_book(client: AsyncClient, db_session) -> None:
 
     # Проверяем, что книга удалена из базы данных
     result = await db_session.get(Book, book.id)
-    assert result is None 
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_export_books_csv(client: AsyncClient, db_session) -> None:
+    """Тест экспорта книг в CSV."""
+    # Создаём несколько книг для теста
+    books = [
+        Book(title="Экспорт 1", author="Автор 1", publication_year=2021),
+        Book(title="Экспорт 2", author="Автор 2", publication_year=2022),
+        Book(title="Другая книга", author="Автор 3", publication_year=2023),
+    ]
+    for book in books:
+        db_session.add(book)
+    await db_session.commit()
+
+    # Тест экспорта всех книг
+    response = await client.get("/api/books/export/csv")
+    
+    # Проверяем статус-код ответа
+    assert response.status_code == 200
+    
+    # Проверяем тип контента
+    assert response.headers["content-type"] == "text/csv"
+    assert "attachment" in response.headers["content-disposition"]
+    assert "books_export.csv" in response.headers["content-disposition"]
+    
+    # Проверяем содержимое CSV (должно содержать заголовки и данные книг)
+    csv_content = response.text
+    assert "ID,Название,Автор,Описание,Год публикации,ISBN,Дата создания,Дата обновления" in csv_content
+    assert "Экспорт 1,Автор 1" in csv_content
+    assert "Экспорт 2,Автор 2" in csv_content
+    assert "Другая книга,Автор 3" in csv_content
+    
+    # Тест экспорта с фильтрацией
+    response = await client.get("/api/books/export/csv?author=Автор 1")
+    
+    # Проверяем статус-код ответа
+    assert response.status_code == 200
+    
+    # Проверяем тип контента и имя файла с фильтром
+    assert "books_author_Автор 1.csv" in response.headers["content-disposition"]
+    
+    # Проверяем содержимое отфильтрованного CSV
+    csv_content = response.text
+    assert "Экспорт 1,Автор 1" in csv_content
+    assert "Экспорт 2,Автор 2" not in csv_content
+    assert "Другая книга,Автор 3" not in csv_content 
