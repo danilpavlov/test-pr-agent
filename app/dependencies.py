@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_async_session
 from app.services.book_service import BookService
+from app.services.metadata_service import MetadataService
 
 
 async def get_book_service(
@@ -20,6 +21,16 @@ async def get_book_service(
         Сервис для работы с книгами
     """
     return BookService(session)
+
+
+async def get_metadata_service() -> MetadataService:
+    """
+    Зависимость для получения сервиса метаданных книг.
+
+    Returns:
+        Сервис для работы с метаданными книг
+    """
+    return MetadataService()
 
 
 async def get_pagination(

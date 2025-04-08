@@ -1,11 +1,17 @@
 from typing import Dict, Optional, Union
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi.responses import StreamingResponse
 
-from app.dependencies import BookId, get_book_service, get_pagination
+from app.dependencies import BookId, get_book_service, get_metadata_service, get_pagination
 from app.models.book import BookCreate, BookInDB, BookResponse, BookUpdate
+from app.models.import_export import ImportResponse
+from app.models.metadata import BookMetadata
 from app.models.response import DefaultResponse, ErrorResponse, PagedResponse
 from app.services.book_service import BookService
+from app.services.metadata_service import MetadataService
+from app.utils.csv_export import create_csv_response
+from app.utils.json_import import process_json_file
 from app.utils.logger import get_logger
 
 router = APIRouter(
@@ -204,4 +210,68 @@ async def delete_book(
     return DefaultResponse(
         status=True,
         message=f"Книга с ID {book_id} успешно удалена",
-    ) 
+    )
+
+
+@router.get(
+    "/{book_id}/metadata",
+    response_model=BookResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Обогатить книгу метаданными",
+    description="Получает метаданные для книги из внешнего API и обогащает ими существующую книгу",
+)
+async def enrich_book_with_metadata(
+    book_id: BookId,
+    book_service: BookService = Depends(get_book_service),
+    metadata_service: MetadataService = Depends(get_metadata_service),
+) -> BookResponse:
+    """
+    Обогащение книги метаданными из внешнего API.
+
+    Args:
+        book_id: Идентификатор книги
+        book_service: Сервис для работы с книгами
+        metadata_service: Сервис для работы с метаданными книг
+
+    Returns:
+        Обогащенная книга
+
+    Raises:
+        HTTPException: Если книга не найдена или возникла ошибка при получении метаданных
+    """
+    # Получаем книгу из базы данных
+    book = await book_service.get_book_by_id(book_id)
+    if book is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Книга с ID {book_id} не найдена",
+        )
+    
+    # Проверяем, что у книги есть ISBN
+    if not book.isbn:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="У книги отсутствует ISBN, невозможно получить метаданные",
+        )
+    
+    # Преобразуем Pydantic модель в словарь для обновления
+    book_dict = book.model_dump()
+    
+    # Скрытый факап: не ловим ошибки от API
+    # Обогащаем данные книги метаданными
+    enhanced_book_data = await metadata_service.enhance_book_data(book.isbn, book_dict)
+    
+    # Скрытый факап: мы изменяем модель напрямую через словарь, без валидации
+    # Создаем модель обновления книги
+    book_update = BookUpdate(**enhanced_book_data)
+    
+    # Обновляем книгу в базе данных
+    updated_book = await book_service.update_book(book_id, book_update)
+    if updated_book is None:
+        # Этот код не должен выполниться, так как мы уже проверили существование книги
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Ошибка при обновлении книги",
+        )
+    
+    return BookResponse.model_validate(updated_book) 

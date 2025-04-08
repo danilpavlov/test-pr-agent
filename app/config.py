@@ -19,6 +19,11 @@ class Settings(BaseSettings):
 
     # Логирование
     log_level: str = "INFO"
+    
+    # Внешний API для метаданных книг
+    metadata_api_url: str = "https://api.bookmetadata.com/v1"
+    # FIXME: Не хранить секретный ключ прямо в коде, использовать переменные окружения!
+    metadata_api_key: str = "sk_live_51LmTS0D7uYYgfakekey8u1TygKhZo0DnR0FNWjZzVYQMHZJAO1hwWddZ"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

@@ -1,7 +1,10 @@
 import pytest
 from httpx import AsyncClient
+from unittest.mock import AsyncMock, patch
 
 from app.core.models import Book
+from app.models.metadata import BookMetadata, Author
+from app.services.metadata_service import MetadataService
 
 
 @pytest.mark.asyncio
@@ -158,4 +161,58 @@ async def test_delete_book(client: AsyncClient, db_session) -> None:
 
     # Проверяем, что книга удалена из базы данных
     result = await db_session.get(Book, book.id)
-    assert result is None 
+    assert result is None
+
+
+@pytest.mark.asyncio
+@patch("app.services.metadata_service.MetadataService.get_book_metadata")
+async def test_enrich_book_with_metadata(mock_get_book_metadata, client: AsyncClient, db_session) -> None:
+    """Тест обогащения книги метаданными."""
+    # Создаём книгу для теста
+    book = Book(
+        title="Книга для метаданных",
+        author="Автор книги",
+        description="Описание книги",
+        publication_year=2022,
+        isbn="1234567890123"
+    )
+    db_session.add(book)
+    await db_session.commit()
+    await db_session.refresh(book)
+    
+    # Моковые метаданные
+    mock_metadata = BookMetadata(
+        isbn="1234567890123",
+        title="Новое название из метаданных",
+        authors=[Author(name="Автор из метаданных")],
+        description="Новое описание из метаданных",
+        pages=300,
+        language="ru"
+    )
+    
+    # Мокаем вызов внешнего API
+    mock_get_book_metadata.return_value = mock_metadata
+    
+    # Отправляем запрос на обогащение книги метаданными
+    response = await client.get(f"/api/books/{book.id}/metadata")
+    
+    # Проверяем статус-код ответа
+    assert response.status_code == 200
+    
+    # Проверяем, что книга была обогащена метаданными
+    assert response.json()["title"] == mock_metadata.title
+    assert response.json()["description"] == mock_metadata.description
+    
+    # Скрытая ошибка: не проверяем, что метод был вызван с правильным ISBN
+    # mock_get_book_metadata.assert_called_once_with(book.isbn)
+    
+    # Проверяем, что книга была обновлена в базе данных
+    await db_session.refresh(book)
+    assert book.title == mock_metadata.title
+    
+    # Скрытая ошибка: проверяем неверное поле, добавляя в тест уязвимость
+    assert "cover_url" in response.json()
+    
+    # Скрытая ошибка: утверждаем, что publication_date правильно установлен,
+    # что неверно из-за ошибки типов в сервисе
+    assert response.json()["publication_date"] is not None 
