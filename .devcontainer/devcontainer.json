@@ -1,0 +1,35 @@
+{
+    "name": "Book API Development",
+    "dockerComposeFile": ["docker-compose.dev.yml"],
+    "service": "app",
+    "workspaceFolder": "/app",
+    "customizations": {
+        "vscode": {
+            "settings": {
+                "python.defaultInterpreterPath": "/app/.venv/bin/python",
+                "python.linting.enabled": true,
+                "python.linting.flake8Enabled": true,
+                "python.linting.mypyEnabled": true,
+                "python.formatting.provider": "black",
+                "python.formatting.blackPath": "/app/.venv/bin/black",
+                "editor.formatOnSave": true,
+                "editor.codeActionsOnSave": {
+                    "source.organizeImports": true
+                },
+                "python.linting.pylintEnabled": false,
+                "python.linting.flake8Path": "/app/.venv/bin/flake8",
+                "python.linting.mypyPath": "/app/.venv/bin/mypy"
+            },
+            "extensions": [
+                "ms-python.python",
+                "ms-python.vscode-pylance",
+                "matangover.mypy",
+                "ms-azuretools.vscode-docker",
+                "njpwerner.autodocstring",
+                "streetsidesoftware.code-spell-checker"
+            ]
+        }
+    },
+    "forwardPorts": [8000, 5432],
+    "postCreateCommand": "poetry install"
+} 

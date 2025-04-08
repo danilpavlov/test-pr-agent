@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    container_name: book_api
+    restart: always
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/app/app
+    depends_on:
+      - db
+    env_file:
+      - .env
+    networks:
+      - book-network
+
+  db:
+    image: postgres:15-alpine
+    container_name: book_db
+    restart: always
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=book_api
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - book-network
+
+volumes:
+  postgres_data:
+
+networks:
+  book-network:
+    driver: bridge 

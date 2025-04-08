@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile.dev
+    container_name: book_api_dev
+    volumes:
+      - ..:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    env_file:
+      - ../.env
+    command: sleep infinity
+    networks:
+      - book-network-dev
+
+  db:
+    image: postgres:15-alpine
+    container_name: book_db_dev
+    restart: always
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=book_api
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+    networks:
+      - book-network-dev
+
+volumes:
+  postgres_data_dev:
+
+networks:
+  book-network-dev:
+    driver: bridge 
