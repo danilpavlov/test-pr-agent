@@ -1,11 +1,13 @@
 from typing import Dict, Optional, Union
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 
 from app.dependencies import BookId, get_book_service, get_pagination
 from app.models.book import BookCreate, BookInDB, BookResponse, BookUpdate
 from app.models.response import DefaultResponse, ErrorResponse, PagedResponse
 from app.services.book_service import BookService
+from app.utils.csv_export import create_csv_response
 from app.utils.logger import get_logger
 
 router = APIRouter(
@@ -204,4 +206,82 @@ async def delete_book(
     return DefaultResponse(
         status=True,
         message=f"Книга с ID {book_id} успешно удалена",
-    ) 
+    )
+
+
+@router.get(
+    "/export/csv",
+    response_class=StreamingResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Экспорт книг в CSV",
+    description="Экспортирует список книг в формате CSV с возможностью фильтрации",
+)
+async def export_books_csv(
+    """
+    Exports books in CSV format with optional filters.
+
+    :param title: Filter by book title (partial match).
+    :type title: Optional[str]
+    :param author: Filter by author name (partial match).
+    :type author: Optional[str]
+    :param publication_year: Filter by publication year (exact match).
+    :type publication_year: Optional[int]
+    :param isbn: Filter by ISBN (exact match).
+    :type isbn: Optional[str]
+    :param limit: Maximum number of books to export.
+    :type limit: int
+    :param book_service: Service for book operations.
+    :type book_service: BookService
+
+    :return: StreamingResponse containing the CSV file with books.
+    :rtype: StreamingResponse
+    """
+    title: Optional[str] = Query(None, description="Фильтр по названию книги"),
+    author: Optional[str] = Query(None, description="Фильтр по автору книги"),
+    publication_year: Optional[int] = Query(
+        None, description="Фильтр по году публикации"
+    ),
+    isbn: Optional[str] = Query(None, description="Фильтр по ISBN"),
+    # Для экспорта можем захотеть большой размер страницы или все записи
+    limit: int = Query(1000, description="Максимальное количество книг для экспорта", ge=1, le=10000),
+    book_service: BookService = Depends(get_book_service),
+) -> StreamingResponse:
+    """
+    Экспортирует книги в формате CSV.
+
+    Args:
+        title: Фильтр по названию книги (частичное совпадение)
+        author: Фильтр по автору книги (частичное совпадение)
+        publication_year: Фильтр по году публикации (точное совпадение)
+        isbn: Фильтр по ISBN (точное совпадение)
+        limit: Максимальное количество книг для экспорта
+        book_service: Сервис для работы с книгами
+
+    Returns:
+        CSV-файл с книгами
+    """
+    filters = {}
+    if title:
+        filters["title"] = title
+    if author:
+        filters["author"] = author
+    if publication_year:
+        filters["publication_year"] = publication_year
+    if isbn:
+        filters["isbn"] = isbn
+
+    # Используем большую страницу для получения книг
+    books, _ = await book_service.get_books(
+        page=1,
+        page_size=limit,
+        filters=filters,
+    )
+
+    filename = "books_export.csv"
+    # Добавляем информацию о фильтрах в имя файла
+    if filters:
+        filter_info = "_".join(f"{k}_{v}" for k, v in filters.items())
+        filename = f"books_{filter_info}.csv"
+    
+    logger.info(f"Экспорт {len(books)} книг в CSV")
+    return create_csv_response(books, filename) 
