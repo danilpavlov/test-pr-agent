@@ -1,11 +1,15 @@
 from typing import Dict, Optional, Union
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi.responses import StreamingResponse
 
 from app.dependencies import BookId, get_book_service, get_pagination
 from app.models.book import BookCreate, BookInDB, BookResponse, BookUpdate
+from app.models.import_export import ImportResponse
 from app.models.response import DefaultResponse, ErrorResponse, PagedResponse
 from app.services.book_service import BookService
+from app.utils.csv_export import create_csv_response
+from app.utils.json_import import process_json_file
 from app.utils.logger import get_logger
 
 router = APIRouter(
@@ -204,4 +208,52 @@ async def delete_book(
     return DefaultResponse(
         status=True,
         message=f"Книга с ID {book_id} успешно удалена",
+    )
+
+
+@router.post(
+    "/import/json",
+    response_model=ImportResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Импорт книг из JSON",
+    description="Импортирует книги из JSON-файла",
+)
+async def import_books_json(
+    file: UploadFile = File(..., description="JSON-файл с данными книг"),
+    book_service: BookService = Depends(get_book_service),
+) -> ImportResponse:
+    """
+    Импортирует книги из JSON-файла.
+
+    Args:
+        file: JSON-файл с данными книг
+        book_service: Сервис для работы с книгами
+
+    Returns:
+        Результат импорта
+
+    Raises:
+        HTTPException: Если файл не является JSON или имеет неверный формат
+    """
+    logger.info(f"Начат импорт книг из файла {file.filename}")
+    
+    # Обработка файла и импорт книг
+    successful_imports, failed_imports, errors = await process_json_file(
+        file, book_service
+    )
+    
+    # Формирование сообщения об итогах импорта
+    total = successful_imports + failed_imports
+    message = f"Импортировано {successful_imports} из {total} книг"
+    
+    # Если были ошибки, добавляем информацию о них
+    if failed_imports > 0:
+        message += f". {failed_imports} не импортировано из-за ошибок."
+    
+    return ImportResponse(
+        status=True,
+        message=message,
+        successful_imports=successful_imports,
+        failed_imports=failed_imports,
+        errors=errors if failed_imports > 0 else None,
     ) 
