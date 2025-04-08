@@ -217,6 +217,25 @@ async def delete_book(
     description="Экспортирует список книг в формате CSV с возможностью фильтрации",
 )
 async def export_books_csv(
+    """
+    Exports books in CSV format with optional filters.
+
+    :param title: Filter by book title (partial match).
+    :type title: Optional[str]
+    :param author: Filter by author name (partial match).
+    :type author: Optional[str]
+    :param publication_year: Filter by publication year (exact match).
+    :type publication_year: Optional[int]
+    :param isbn: Filter by ISBN (exact match).
+    :type isbn: Optional[str]
+    :param limit: Maximum number of books to export.
+    :type limit: int
+    :param book_service: Service for book operations.
+    :type book_service: BookService
+
+    :return: StreamingResponse containing the CSV file with books.
+    :rtype: StreamingResponse
+    """
     title: Optional[str] = Query(None, description="Фильтр по названию книги"),
     author: Optional[str] = Query(None, description="Фильтр по автору книги"),
     publication_year: Optional[int] = Query(
